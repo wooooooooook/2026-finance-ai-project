@@ -42,8 +42,8 @@ BIGKINDS_ROOT_URL = "https://www.bigkinds.or.kr/"
 SEARCH_URL = "https://www.bigkinds.or.kr/v2/news/search.do"
 
 # BigKinds 로그인 계정. 팀원 각자 자신의 계정으로 교체해서 사용.
-BIGKINDS_USERNAME = "otsu9110@gmail.com"
-BIGKINDS_PASSWORD = "zep!ecHa3"
+BIGKINDS_USERNAME = "YOUR_USERNAME"
+BIGKINDS_PASSWORD = "YOUR_PASSWORD"
 
 session = requests.Session()
 session.headers["Authorization"] = f"Bearer {API_KEY}"
@@ -52,6 +52,48 @@ session.headers["Authorization"] = f"Bearer {API_KEY}"
 total_wait_seconds = 0.0
 
 _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+# 브라우저 콘솔/페이지 에러 메시지를 모아두는 버퍼 (실패 시점에 터미널로 출력하기 위함)
+console_messages: list[str] = []
+
+
+# page에 콘솔/JS 에러 메시지를 console_messages에 쌓는 리스너를 연결한다.
+def attach_console_logging(page: Page) -> None:
+    page.on("console", lambda msg: console_messages.append(f"[console:{msg.type}] {msg.text}"))
+    page.on("pageerror", lambda err: console_messages.append(f"[pageerror] {err}"))
+    page.on(
+        "requestfailed",
+        lambda req: console_messages.append(
+            f"[requestfailed] {req.method} {req.url} - {req.failure}"
+        ),
+    )
+
+
+# 실패 시점에 브라우저 상태(URL, 콘솔 로그, 스크린샷)를 터미널에 출력하고 파일로 남긴다.
+def dump_debug_info(page: Page, target_date: dt.date | None) -> None:
+    print("--- 디버그 정보 ---")
+    try:
+        print(f"현재 URL: {page.url}")
+        print(f"페이지 제목: {page.title()}")
+    except Exception as e:
+        print(f"(URL/제목 조회 실패: {type(e).__name__}: {e})")
+
+    if console_messages:
+        print(f"브라우저 콘솔/네트워크 로그 ({len(console_messages)}개):")
+        for line in console_messages[-30:]:
+            print(f"  {line}")
+    else:
+        print("브라우저 콘솔 로그 없음")
+
+    try:
+        DOWNLOAD_DIR.mkdir(exist_ok=True)
+        suffix = target_date.isoformat() if target_date else "unknown"
+        screenshot_path = DOWNLOAD_DIR / f"error_{suffix}_{int(time.time())}.png"
+        page.screenshot(path=str(screenshot_path), full_page=True)
+        print(f"스크린샷 저장: {screenshot_path}")
+    except Exception as e:
+        print(f"(스크린샷 저장 실패: {type(e).__name__}: {e})")
+    print("-------------------")
 
 
 # 오래 걸리는 동기 작업(Playwright 대기 등) 중 터미널에 회전 스피너를 표시한다.
@@ -229,6 +271,7 @@ def run() -> None:
         # (Playwright는 핸들러가 없으면 다이얼로그를 기본 dismiss 하므로 다운로드가 시작되지 않는다)
         page.on("dialog", lambda dialog: dialog.accept())
         page.set_default_timeout(60_000)  # 모든 동작(클릭/대기)의 기본 타임아웃을 30초 -> 60초로
+        attach_console_logging(page)
 
         login(page)
 
@@ -260,6 +303,7 @@ def run() -> None:
             sys.exit(1)
         except Exception as e:
             print(f"[중단] {target_date} 처리 중 오류 발생: {type(e).__name__}: {e}")
+            dump_debug_info(page, target_date)
             if target_date is not None:
                 try:
                     release_date(target_date)
