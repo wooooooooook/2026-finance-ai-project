@@ -13,6 +13,7 @@ develop-eggs/
 dist/
 downloads/
 eggs/
+*storage_state.json
 .eggs/
 lib/
 lib64/
@@ -221,3 +222,6 @@ __marimo__/
 
 # Project data
 /data/
+
+# macOS
+.DS_Store
