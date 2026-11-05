@@ -243,7 +243,7 @@ def download_excel(page: Page, target_date: dt.date) -> Path:
     page.get_by_role("button", name="엑셀 다운로드").wait_for(state="visible", timeout=60_000)
 
     with spinner("엑셀 다운로드 버튼 클릭 완료 - 다운로드 대기 중"):
-        with page.expect_download(timeout=60_000) as download_info:
+        with page.expect_download(timeout=120_000) as download_info:
             page.get_by_role("button", name="엑셀 다운로드").click()
     download = download_info.value
 
