@@ -223,6 +223,15 @@ __marimo__/
 # Project data
 /data/
 *.npz
+*.csv
+*.csv.gz
+
+# Raw data (대용량, 공유 안 함 - 폴더 구조만 추적)
+/raw/*
+!/raw/.gitkeep
+!/raw/news
+/raw/news/*
+!/raw/news/.gitkeep
 
 # macOS
 .DS_Store
