@@ -226,6 +226,9 @@ __marimo__/
 *.csv
 *.csv.gz
 
+# CatBoost 학습 시 자동 생성되는 임시 로그/메타데이터
+catboost_info/
+
 # Raw data (대용량, 공유 안 함 - 폴더 구조만 추적)
 /raw/*
 !/raw/.gitkeep
