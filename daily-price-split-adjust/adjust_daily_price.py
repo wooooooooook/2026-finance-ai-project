@@ -32,6 +32,7 @@ LOG_DIR = TOOL_DIR / "log"
 
 SHARE_JUMP_THRESHOLD = 0.05   # 상장주식수가 하루 사이 이 비율 이상 변하면 이벤트 후보
 PRICE_INVERSE_TOLERANCE = 0.10  # 종가 변화가 상장주식수 변화의 역수와 이 오차 이내로 맞으면 분할로 확정
+HALT_RESUME_TOLERANCE = 0.25  # 직전 거래일 거래량이 0(거래정지)이면 재개일 가격이 추가로 움직여서 허용오차를 넓힘(주식수·가격 방향이 반대일 때만). 1.0까지 넓히면 가격이 안 오른 감자까지 잡혀 월별과 어긋남
 MIN_ROWS = 30  # 이보다 적으면(사실상 결측 종목, PREPROCESSING.md 7번) 건너뜀
 
 PRICE_COLS = ["시가", "고가", "저가", "종가"]
@@ -87,7 +88,14 @@ def adjust_ticker(ticker: str) -> tuple[pd.DataFrame | None, int]:
     valid = ~np.isnan(shares_ratio) & ~np.isnan(price_ratio) & (shares_ratio > 0)
     share_jumped = np.abs(shares_ratio - 1) > SHARE_JUMP_THRESHOLD
     inverse_match = np.abs(shares_ratio * price_ratio - 1) < PRICE_INVERSE_TOLERANCE
-    is_event[valid] = share_jumped[valid] & inverse_match[valid]
+    volume = df["거래량"].to_numpy(dtype="float64")
+    after_halt = np.zeros(n, dtype=bool)
+    after_halt[1:] = volume[:-1] == 0
+    opposite_direction = (shares_ratio - 1) * (price_ratio - 1) < 0
+    halt_resume_match = (
+        after_halt & opposite_direction & (np.abs(shares_ratio * price_ratio - 1) < HALT_RESUME_TOLERANCE)
+    )
+    is_event[valid] = share_jumped[valid] & (inverse_match[valid] | halt_resume_match[valid])
 
     adj_factor = np.ones(n, dtype="float64")
     for i in range(n - 2, -1, -1):
@@ -97,7 +105,7 @@ def adjust_ticker(ticker: str) -> tuple[pd.DataFrame | None, int]:
     out = price.merge(mcap[["날짜"]], on="날짜", how="inner").sort_values("날짜").reset_index(drop=True)
     for col in PRICE_COLS:
         out[f"수정{col}"] = df[col].to_numpy() * adj_factor
-    out["수정등락률"] = out["수정종가"].pct_change() * 100
+    out["수정등락률"] = out["수정종가"].pct_change(fill_method=None) * 100
     out["분할조정factor"] = adj_factor
     out["분할이벤트"] = is_event
 

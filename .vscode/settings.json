@@ -1,0 +1,19 @@
+{
+  "terminal.integrated.cwd": "/root/2026-finance-ai-project",
+  "python.analysis.exclude": [
+    "**/raw/**",
+    "**/news_cache/**",
+    "**/logs/**",
+    "**/.venv/**",
+    "**/__pycache__/**"
+  ],
+  "files.watcherExclude": {
+    "**/raw/**": true,
+    "**/news_cache/**": true,
+    "**/logs/**": true
+  },
+  "search.exclude": {
+    "**/raw/**": true,
+    "**/news_cache/**": true
+  },
+}

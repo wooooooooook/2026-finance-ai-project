@@ -278,26 +278,26 @@ def stage_news_embed() -> None:
 
 # ===========================================================================
 # 4. 일별/월별 시장 평균 수익률 시계열
-#    raw/daily_price(일별, raw 종가 — 분할/배당 미반영) vs raw/returns(월별,
-#    adjusted_monthly_return — 분할/배당 반영) 등가중 평균.
-#    raw/daily_price는 분할 시 가격이 뚝 끊기므로, 비정상적으로 큰 일별 변동은 분할로 보고
-#    보정(역산)하지 않고 그 날 수익률만 결측 처리한다 — raw/returns의 "결측은 채우지 않는다"
-#    원칙과 같은 철학.
-#    주의: SPLIT_JUMP_THRESHOLD(25%)는 가격제한폭(최근 ±30%, 2015년 이전 ±15%)과 겹쳐서
-#    정상적인 상한가/하한가를 분할로 오인할 수 있음 — 1차 근사치이며 추후 검증 필요.
+#    raw/daily_price_adjusted(일별, 수정종가 — 015에서 분할/무상증자 역산 완료) vs
+#    raw/returns(월별, adjusted_monthly_return) 등가중 평균.
+#    원래는 raw/daily_price(raw 종가)를 직접 쓰면서 ±25% 넘는 변동만 결측 처리하는
+#    방식이었는데(분할 보정은 안 하고 그 날만 버림), 015에서 raw/daily_marketcap의
+#    상장주식수 변화로 분할을 제대로 역산한 수정종가(raw/daily_price_adjusted)를
+#    만들어서 여기도 같은 방식으로 맞춤(2026-11-23). 거래정지(거래량=0) 재개 시
+#    생기는 극단치도 015(PREPROCESSING.md 9번)와 동일하게 결측 처리.
 # ===========================================================================
 
 FEATURES_DIR = BASE_DIR / "features"
 RESULTS_DIR = BASE_DIR / "results"
 IMAGES_DIR = BASE_DIR / "images"
-DAILY_PRICE_DIR = RAW / "daily_price"
+DAILY_PRICE_DIR = RAW / "daily_price_adjusted"
 RETURNS_DIR = RAW / "returns"
 
 EXCLUDED_CODES = {"004730", "217590"}                          # PREPROCESSING.md 7번 — 사실상 결측
 HIGH_MISSING_CODES = {"013890", "005560", "000080", "001780"}  # raw/daily_price README — 거래일 5%+ 누락
 OHLC_ANOMALY_CODES = {"000950", "010100", "014790", "015110"}  # raw/daily_price README — 고가/저가 역전
 DAILY_EXCLUDED_CODES = EXCLUDED_CODES | HIGH_MISSING_CODES | OHLC_ANOMALY_CODES
-SPLIT_JUMP_THRESHOLD = 0.25  # 이 이상 하루 변동은 분할/이상치로 보고 그 날 수익률만 결측 처리(보정 안 함)
+RETURN_CAP = 0.30  # KRX 가격제한폭(±30%) 초과 수익률은 이상치로 보고 결측 처리(PREPROCESSING.md 9번)
 
 
 def _load_code_order() -> list[str]:
@@ -308,10 +308,12 @@ def _load_code_order() -> list[str]:
 
 
 def _daily_returns_for_ticker(path: Path) -> pd.Series:
-    df = pd.read_csv(path, usecols=["날짜", "종가"], dtype={"종가": float})
+    df = pd.read_csv(path, usecols=["날짜", "수정종가", "거래량"],
+                      dtype={"수정종가": float, "거래량": float})
     df = df.sort_values("날짜")
-    ret = df["종가"].pct_change()
-    ret[ret.abs() > SPLIT_JUMP_THRESHOLD] = np.nan
+    ret = df["수정종가"].pct_change(fill_method=None)
+    halted = (df["거래량"] == 0) | (df["거래량"].shift(1) == 0)
+    ret = ret.where(~halted.to_numpy() & (ret.abs() <= RETURN_CAP))
     ret.index = df["날짜"].to_numpy()
     return ret
 
